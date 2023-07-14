@@ -10,17 +10,20 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const userRoutes = require("./routes/userRoutes.cjs");
 const pdf2img = require('pdf-img-convert');
+import http from "http";
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
-app.use(cors());
+app.use(  cors({
+  credentials: true,
+  origin: [String(process.env.CORS_ORIGIN), "https://api.greynote.app/lecture"],
+}));
 app.use( express.json() );
 app.use( express.urlencoded({ extended: true}) );
 
 dotenv.config();
-
 app.use("/api/auth", userRoutes);
 
 
@@ -202,7 +205,8 @@ try{
 }catch(err){
   console.log(err);
 }
+let server = http.createServer(app);
 
-app.listen(process.env.PORT, () => {
+server.listen({ port: process.env.PORT }, () => {
   console.log(`Server listening on port ${process.env.PORT}`);
 });
