@@ -12,7 +12,7 @@ const userRoutes = require("./routes/userRoutes.cjs");
 const pdf2img = require('pdf-img-convert');
 import http from "http";
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+// const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
@@ -92,6 +92,7 @@ try{
          
       try {
       console.log(req.file);
+      const userId = req.userId;
       
       if(!req.file) {
         res.status(500).json({
@@ -127,7 +128,7 @@ try{
       
         try{
             // Setup UUIDV4
-            const uniqueId = uuidv4();
+            // const uniqueId = uuidv4();
     
             //Setup the image converter and OCR
             const outputImages2 = pdf2img.convert(req.file.path).catch(err => {res.status(502).json({err: {message: "Ensure your file is not corrupted and try again"}}); console.log(err);});
@@ -138,7 +139,7 @@ try{
                   return new Promise(resolve => setTimeout(resolve, ms));
                 }
                 for (var i = 0; i < (outputImages.length); i++){
-                  fs.writeFile("output" +uniqueId+i+".png", outputImages[i], function (error) {
+                  fs.writeFile("output" +userId+i+".png", outputImages[i], function (error) {
                     if (error) { console.error("Error: " + error); }
                   });
                     console.log("Page "+ i +" Done");
@@ -152,7 +153,7 @@ try{
                     for(var i = 0; i<outputImages.length; i++){                        
                           await worker.loadLanguage('eng');
                           await worker.initialize('eng');                
-                          var { data: { text } } = await worker.recognize('./output'+uniqueId+i+".png");
+                          var { data: { text } } = await worker.recognize('./output'+userId+i+".png");
     
                           //Populate index
                             try {
@@ -166,7 +167,7 @@ try{
                               console.log(pdfTextEmbedding);
                               
                               const pdfIndex = pinecone.Index("lecture-mate");
-                              const upsertRequest = { vectors: [ {id: "vec" + i , values: pdfTextEmbedding, metadata: { text: text }} ] , namespace: `lecture-mate-${uniqueId}` };
+                              const upsertRequest = { vectors: [ {id: "vec" + i , values: pdfTextEmbedding, metadata: { text: text }} ] , namespace: `lecture-mate-${userId}` };
                     
                               //initalizing.....this will take up to 2 mins
                     
@@ -190,7 +191,7 @@ try{
                         }); 
                                         
                       }
-                        res.json({uniqueId: uniqueId});                    
+                        // res.json({uniqueId: uniqueId});                    
                     }).catch(err => {console.log(err)});
                   }catch(err) {
                       res.status(500).json({err: {message: "There was an error processing your request"}});
