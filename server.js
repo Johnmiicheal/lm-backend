@@ -91,7 +91,7 @@ try{
     app.post("/api/upload/", upload.single("file"), async (req, res) => { 
          
       try {
-      console.log(req.file);
+      console.log(req.data.file);
       const userId = req.userId;
       
       if(!req.file) {
