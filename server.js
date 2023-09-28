@@ -1,51 +1,34 @@
 import express from "express";
-import multer from "multer";
 import cors from "cors";
 import dotenv from 'dotenv';
-import mongoose from "mongoose";
 import { Configuration, OpenAIApi } from "openai";
-import { PineconeClient } from "@pinecone-database/pinecone";
 import { createWorker } from 'tesseract.js';
 import { createRequire } from "module";
+import { createClient } from '@supabase/supabase-js';
 const require = createRequire(import.meta.url);
 const userRoutes = require("./routes/userRoutes.cjs");
 const pdf2img = require('pdf-img-convert');
-import http from "http";
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
-app.use(
-  (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    next();
-  }  
-//   cors({
-//   credentials: true,
-//   origin: "http://127.0.0.1:4000/api/upload/",
-// })
-);
+// app.use(cors());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  next();
+});
 app.use( express.json() );
 app.use( express.urlencoded({ extended: true}) );
 
 dotenv.config();
+
 app.use("/api/auth", userRoutes);
 
+const supabaseURL = process.env.SUPA_URL
+const supabaseAnonKey = process.env.SUPA_ANON_KEY
 
-//Setup mongoose
-// mongoose.connect(process.env.MONGO_URL, {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// })
-// .then(async () => {
-//   console.log("DB Connection Successful");
-// })
-// .catch((err) => {
-//   console.log(err.message);
-// });
+const supabase = createClient(supabaseURL, supabaseAnonKey);
 
-try{
       // Initialize Openai
       const configuration = new Configuration({
         apiKey: process.env.OPENAI_API_KEY,
@@ -59,177 +42,142 @@ try{
             }
           });
           console.log("Error");
-          // return ;
         }else {
           console.log("It's working!!!");
-          // res.write("Please wait....");
         }
-    
-      
-      
-        // Initialize pinecone 
-        const pinecone = new PineconeClient();
-        await pinecone.init({
-        environment: "us-central1-gcp",
-        apiKey: process.env.PINECONE_API_KEY,
-      });
-
-      const client = new PineconeClient(); 
-    
-      await client.init({ 
-        environment: "us-central1-gcp",
-        apiKey: process.env.PINECONE_API_KEY, 
-      });      
-    
-    // Declare constant
-    const EMBEDDING_MODEL = "text-embedding-ada-002";
-    
-    const upload = multer({
-      storage: multer.diskStorage({
-        destination: './uploads',
-        filename: (req, file, cb) => {
-          cb(null, file.originalname);
-        }
-      })
-    })
-
-    const getPdf = (file) => {
-      if(!file){
-        res.status(500).json({
-          err: {
-          message: "Upload failed"
-        }
-      });
-        console.log("please upload your file");
-        return
-      }
-    }
     
     // PDF CUSTOMIZATION (EMBEDDING)
-    app.post("/api/upload/", upload.single("file"), async (req, res) => { 
-         
-      try {
-      console.log(req.file);
-      // const userId = req.userId;
+    app.post("/api/upload/", async (req, res) => { 
+      const url = req.body.url
+      const fileName = req.body.fileName
+      const userId = req.body.userId
+      const EMBEDDING_MODEL = "text-embedding-ada-002"
+      // console.log(url)
+      // console.log(fileName)
       // console.log(userId)
-    
-      
-      if(!req.file) {
-        res.status(500).json({
-          err: {
-          message: "Upload failed"
+
+      async function insertBook(bookName, userId) {
+        try {
+          const { data, error } = await supabase
+                                        .from('booklist')
+                                        .insert([{ book_name: bookName, user_id: userId, }]);
+            
+          if (error || data === null) {
+            console.error('Error inserting book:', error);
+            return res.status(404).json({Error: "Please check your internet connection"})
+          } else {
+            console.log('Book inserted successfully:', data);
+            return true
+          }
+        } catch (error) {
+          console.log('Error inserting pdf info:', error);
+          return res.status(404).json({Error: "Error uploading file"})
         }
-      });
-        console.log("please upload your file");
-        return;
+      }
+  
+      async function insertPage(userId, bookName, pageData, embedding, pageNumber) {
+        try {
+          const { data, error } = await supabase
+                                        .from('pdfs')
+                                        .insert([{ user_id: userId, pdf_name: bookName, page_text: pageData, vector_data: embedding, page_number: pageNumber }]);
+            
+          if (error || data === null) {
+            console.error('Error inserting page:', error);
+            return res.status(404).json({Error: "Please check your internet connection"})
+          } else {
+            console.log('Page inserted successfully:', data);
+            return true
+          }
+        } catch (error) {
+          console.log('Error inserting page:', error);
+          return res.status(404).json({Error: "Error uploading file"})
+        }
       }
 
-      // Pinecone Configuration     
-      const list = await client.listIndexes();
-            // console.log(list);
-      
-            if(list[0] !== "lecture-mate") {
-              // delay(15000).then(
-                // () => {
-                  pinecone.createIndex({
-                  createRequest: {
-                    name: "lecture-mate",
-                    dimension: 1536,
-                  },
-                });
-                
-                  console.log("Index created successfully");
-                  return true;
-                // }
-              // )
-            }else{
-              console.log("There already exists that index");
-            }  
-      
+      const extractTextEmbeddings = (urlData) => {
+
         try{
-            // Setup UUIDV4
-            const uniqueId = uuidv4();
-    
-            //Setup the image converter and OCR
-            const outputImages2 = pdf2img.convert(req.file.path).catch(err => {res.status(502).json({err: {message: "Ensure your file is not corrupted and try again"}}); console.log(err);});
-    
-            outputImages2.then(async function(outputImages) {           
+          const outputImages1 = pdf2img.convert(urlData).catch((err) => {
+            console.log("Error converting to image: " + err)
+            return res.status(405).json({Error: "Error upoading file. Please ensure the file name only contains anlphabets, numbers, spaces and dashes"})            
+            });
+        
+          outputImages1.then(async function(outputImages) { 
+            function delay(ms) {
+              return new Promise(resolve => setTimeout(resolve, ms));
+            }
+            
+            if(fileName && outputImages.length !== undefined){
+              try {
                 console.log(outputImages.length);
-                function delay(ms) {
-                  return new Promise(resolve => setTimeout(resolve, ms));
-                }
                 for (var i = 0; i < (outputImages.length); i++){
-                  fs.writeFile("output" +uniqueId+i+".png", outputImages[i], function (error) {
-                    if (error) { console.error("Error: " + error); }
-                  });
-                    console.log("Page "+ i +" Done");
-                    }
-                    
-                    const worker = await createWorker({
-                      logger: m => console.log(m)
-                    });
-                    
-                    
-                    for(var i = 0; i<outputImages.length; i++){                        
-                          await worker.loadLanguage('eng');
-                          await worker.initialize('eng');                
-                          var { data: { text } } = await worker.recognize('./output'+uniqueId+i+".png");
-                          var textAndPageNumber = text + String(" $Page Number$: " + i + 1);
-    
-                          //Populate index
-                            try {
-                              const pdfEmbedding = await openai.createEmbedding({
-                                model: EMBEDDING_MODEL,
-                                input: textAndPageNumber,
-                              });
-                              console.log(textAndPageNumber);
-                    
-                              const pdfTextEmbedding = pdfEmbedding.data.data[0].embedding;
-                              console.log(pdfTextEmbedding);
-                              
-                              const pdfIndex = pinecone.Index("lecture-mate");
-                              const upsertRequest = { vectors: [ {id: "vec" + i , values: pdfTextEmbedding, metadata: { text: textAndPageNumber }} ] , namespace: `lecture-mate-${uniqueId}` };
-                    
-                              //initalizing.....this will take up to 2 mins
-                    
-                                try{
-                                  pdfIndex.upsert({ upsertRequest });
-                                  console.log("Upsert Successfull " + i);
-                                  const completionPercentage = Math.floor((i+1)/outputImages.length*100);
-                                  var count = "Uploading "+ completionPercentage + "%";
-                                  console.log(count);
-                                  }catch(err){
-                                  console.log(err);
-                                }
-                              }catch(err){
-                                  console.log(err);
-                            }
-    
-                          console.log(text);
-                          delay(10000000).then(
-                            async () => {                    
-                          await worker.terminate();   
-                        }); 
-                                        
-                      }
-                        res.json({uniqueId: uniqueId, fileName: req.file.filename});                    
-                    }).catch(err => {console.log(err)});
-                  }catch(err) {
-                      res.status(500).json({err: {message: "There was an error processing your request"}});
+                fs.writeFile("output" +fileName+i+".png", outputImages[i], function (error) {
+                  if (error) { console.error("Error: " + error); }
+                });
+                  console.log("Page "+ i +" Done");
                   }
+              } catch (error) {
+                console.log("Error converting to images: " + error)
+                return res.status(406).json({Error: "Error upoading file"})
+              }
 
-      }catch(err) {
-        console.log(err);
-          res.status(500).json({err: {message: "Check your internet connection and try again"}});     
-      }
-    });        
-    
-}catch(err){
-  console.log(err);
-}
-let server = http.createServer(app);
+              try {
+                //Initialize worker
+                  const worker = await createWorker({
+                    logger: m => console.log(m)
+                  });
+                  
+                  //Store the pdf name
+                  // insertBook(fileName, userId)
+                  const insertBookReturn = await insertBook(fileName, userId)
 
-server.listen({ port: process.env.PORT }, () => {
+                  //Loop through the images of each page and extract vector data from the text  
+                  if(insertBookReturn === true) {
+                    for(var i = 0; i<outputImages.length; i++){                        
+                      await worker.loadLanguage('eng');
+                      await worker.initialize('eng');                
+                      var { data: { text } } = await worker.recognize('./output'+fileName+i+".png");
+
+
+                      const pdfEmbedding = await openai.createEmbedding({
+                                                        model: EMBEDDING_MODEL,
+                                                        input: text,
+                                                      });
+                                                      
+                                            
+                      const pdfTextEmbedding = pdfEmbedding.data.data[0].embedding;
+                      console.log(pdfTextEmbedding);
+
+                      //Store each of the complete page data
+                      insertPage(userId, fileName, text, pdfTextEmbedding, i+1);                      
+
+                      console.log(text)
+                      
+                      if(i+1 === outputImages.length){
+                        res.status(200).json({Success: "Upload Successful"})
+                      }
+                      delay(10000000).then(
+                        async () => {                    
+                      await worker.terminate();   
+                    });
+                    }         
+                  }                       
+              } catch (error) {
+                console.log("Error extracting and storing data from each text : " + error)
+                return res.status(404).json({message : "Check your network connection and try again"})
+              }}                   
+        }) 
+        }catch(err){
+          console.log("Error uploading file: " + err)
+          return res.status(400).json({"Error uploading file": err})  
+        }    
+    }    
+
+    if(url && fileName && userId){
+    extractTextEmbeddings(url)
+    } 
+    })
+
+app.listen(process.env.PORT, () => {
   console.log(`Server listening on port ${process.env.PORT}`);
-}
-);
+});
