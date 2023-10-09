@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import dotenv from 'dotenv';
 import { Configuration, OpenAIApi } from "openai";
 import { createWorker } from 'tesseract.js';
@@ -9,6 +8,7 @@ const require = createRequire(import.meta.url);
 const userRoutes = require("./routes/userRoutes.cjs");
 const pdf2img = require('pdf-img-convert');
 const fs = require('fs');
+const cors = require('cors');
 
 const app = express();
 
