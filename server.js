@@ -20,7 +20,7 @@ const corsOptions = {
 };
 
 // Enable CORS for the '/api' route
-app.use('/api/upload/', cors(corsOptions));
+app.use('/api', cors(corsOptions));
 
 app.use( express.json() );
 app.use( express.urlencoded({ extended: true}) );
