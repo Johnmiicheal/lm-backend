@@ -12,12 +12,16 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors({
-  origin: 'https://lecturemate.org', // Replace with your frontend domain
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+const corsOptions = {
+  origin: 'https://lecturemate.org', // Replace with your frontend's domain
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   preflightContinue: false,
-  optionsSuccessStatus: 204,
-}));
+  optionsSuccessStatus: 204
+};
+
+// Enable CORS for the '/api' route
+app.use('/api/upload/', cors(corsOptions));
+
 app.use( express.json() );
 app.use( express.urlencoded({ extended: true}) );
 
