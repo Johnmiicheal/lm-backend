@@ -15,6 +15,7 @@ const app = express();
 const corsOptions = {
   origin: 'https://lecturemate.org', // Replace with your frontend's domain
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
