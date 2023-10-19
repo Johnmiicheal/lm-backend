@@ -12,7 +12,17 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: ['https://lecturemate.org', "https://api.greynote.app/lecture"], // Replace with your frontend's domain
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// Enable CORS for the '/api' route
+app.use('/api', cors(corsOptions));
+
 app.use( express.json() );
 app.use( express.urlencoded({ extended: true}) );
 
