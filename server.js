@@ -15,6 +15,7 @@ const app = express();
 const corsOptions = {
   origin: ['https://lecturemate.org', "https://api.greynote.app/lecture"], // Replace with your frontend's domain
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  allowedHeaders: 'Authorization',
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204
